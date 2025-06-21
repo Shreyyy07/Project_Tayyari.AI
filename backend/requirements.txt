@@ -115,9 +115,6 @@ langchain-community==0.0.13
 pypdf==3.17.4
 werkzeug==3.0.1
 pdfplumber==0.10.3
-# OLD (causing the error)
-torch==2.1.0
-# NEW (recommended fix)
 torch==2.5.0
 numpy==1.24.3
 soundfile==0.12.1
