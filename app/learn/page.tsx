@@ -1,12 +1,10 @@
 "use client";
 
 import type React from "react";
-
 import { useState, useEffect } from "react";
-import { Upload, Loader2, Sparkles, Book, Video, FileText, X, ArrowLeft } from "lucide-react";
+import { Upload, Loader2, Sparkles, FileText, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
-import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -39,6 +37,32 @@ const scaleIn = {
   },
 };
 
+type RecentChat = {
+  id: number;
+  title: string;
+  description: string;
+  timestamp: string;
+  icon: string;
+  color: string;
+  progress: number;
+};
+
+const RECENT_COLORS = [
+  "from-purple-600/5 to-blue-600/5",
+  "from-blue-600/5 to-cyan-600/5",
+  "from-green-600/5 to-emerald-600/5",
+];
+const RECENT_ICONS = ["🧠", "⚛️", "📈"];
+
+function getTimeAgo(ts: number) {
+  const now = Date.now();
+  const diff = now - ts;
+  if (diff < 60 * 1000) return "just now";
+  if (diff < 3600 * 1000) return `${Math.floor(diff / (60 * 1000))} min ago`;
+  if (diff < 24 * 3600 * 1000) return `${Math.floor(diff / (3600 * 1000))} hour ago`;
+  return `${Math.floor(diff / (24 * 3600 * 1000))} days ago`;
+}
+
 export default function UploadModule() {
   const router = useRouter();
   const [showAllConversations, setShowAllConversations] = useState(false);
@@ -51,22 +75,84 @@ export default function UploadModule() {
     { name: string; url: string }[]
   >([]);
 
+  // --- Recent Chat State ---
+  const [recentChats, setRecentChats] = useState<RecentChat[]>([]);
+
+  useEffect(() => {
+    const LOCALSTORAGE_KEY = "tayyari-chat-messages-v2";
+    function extractRecentChats(): RecentChat[] {
+      try {
+        const raw = localStorage.getItem(LOCALSTORAGE_KEY);
+        if (!raw) return [];
+        const messages = JSON.parse(raw) as any[];
+        const pairs: { user: any; ai: any }[] = [];
+        let i = 0;
+        while (i < messages.length) {
+          if (messages[i].sender === "user") {
+            let userMsg = messages[i];
+            let aiMsg = messages[i + 1] && messages[i + 1].sender === "ai" ? messages[i + 1] : null;
+            pairs.push({ user: userMsg, ai: aiMsg });
+            i += aiMsg ? 2 : 1;
+          } else {
+            i++;
+          }
+        }
+        return pairs
+          .slice(-3)
+          .reverse()
+          .map((pair, idx) => {
+            const title =
+              pair.user.content?.substring(0, 48) +
+              (pair.user.content.length > 48 ? "..." : "");
+            let description = "";
+            if (pair.ai?.content) {
+              const headingMatch = pair.ai.content.match(/(?:^|\n)##\s*(.*)/);
+              if (headingMatch) {
+                description = headingMatch[1];
+              } else {
+                description =
+                  pair.ai.content
+                    .replace(/[#>*_\-\n]/g, " ")
+                    .substring(0, 60) + "...";
+              }
+            }
+            const timestamp = getTimeAgo(pair.user.id);
+            return {
+              id: pair.user.id,
+              title: title || "Untitled",
+              description: description || "No summary available",
+              timestamp,
+              icon: RECENT_ICONS[idx % RECENT_ICONS.length],
+              color: RECENT_COLORS[idx % RECENT_COLORS.length],
+              progress: 100,
+            };
+          });
+      } catch {
+        return [];
+      }
+    }
+    setRecentChats(extractRecentChats());
+    const onStorage = () => setRecentChats(extractRecentChats());
+    window.addEventListener("storage", onStorage);
+    const interval = setInterval(() => setRecentChats(extractRecentChats()), 2000);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      clearInterval(interval);
+    };
+  }, []);
+
   useEffect(() => {
     const handleEscapeKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && showAllConversations) {
         setShowAllConversations(false);
       }
     };
-
     document.addEventListener('keydown', handleEscapeKey);
     return () => document.removeEventListener('keydown', handleEscapeKey);
   }, [showAllConversations]);
 
   const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-// <<<<<<< HEAD
-//     setIsDragging(true);
-// =======
     const hasValidFile = Array.from(e.dataTransfer.items).some(
       (item) =>
         item.type === "application/pdf" ||
@@ -76,7 +162,6 @@ export default function UploadModule() {
     if (!hasValidFile) {
       e.dataTransfer.dropEffect = "none";
     }
-// >>>>>>> 554edbb75d73b37c832e60d5103f94cb2b20149e
   };
 
   const onDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
@@ -101,7 +186,6 @@ export default function UploadModule() {
   const validateFiles = (files: File[]) => {
     const validFiles: File[] = [];
     const invalidFiles: File[] = [];
-
     files.forEach(file => {
       if (file.type === "application/pdf") {
         validFiles.push(file);
@@ -109,154 +193,68 @@ export default function UploadModule() {
         invalidFiles.push(file);
       }
     });
-
     return { validFiles, invalidFiles };
   };
 
   const handleFiles = async (files: File[]) => {
-// <<<<<<< HEAD
-// =======
     const { validFiles, invalidFiles } = validateFiles(files);
-
     if (invalidFiles.length > 0) {
       toast.error("Only PDF files are allowed");
       return;
     }
-
     if (validFiles.length === 0) {
       return;
     }
-
-// >>>>>>> 554edbb75d73b37c832e60d5103f94cb2b20149e
     setUploading(true);
     setProgress(0);
     const uploadedData: { name: string; url: string }[] = [];
-
     for (const file of files) {
       try {
         const { cdnUrl } = await client.uploadFile(file);
         uploadedData.push({ name: file.name, url: cdnUrl });
-
         toast.success(`${file.name} uploaded successfully`, {
           icon: <Sparkles className="w-4 h-4" />,
         });
-
-        console.log(cdnUrl);
       } catch {
         toast.error(`Failed to upload ${file.name}`);
       }
     }
-
     setUploadedFiles((prev) => [...prev, ...uploadedData]);
     setUploading(false);
     setProgress(0);
   };
-
-  // eslint-disable-next-line
-  const simulateFileUpload = async (file: File) => {
-    return new Promise((resolve) => {
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += 10;
-        setProgress(progress);
-        if (progress === 100) {
-          clearInterval(interval);
-          resolve(true);
-        }
-      }, 500);
-    });
-  };
-
-  const conversations = [
-    {
-      id: 1,
-      title: "Neural Networks & Deep Learning",
-      description:
-        "Exploring activation functions, backpropagation, and CNN architectures",
-      timestamp: "2 min ago",
-      icon: "🧠",
-      color: "from-purple-600/5 to-blue-600/5",
-      progress: 85,
-    },
-    {
-      id: 2,
-      title: "Quantum Mechanics Basics",
-      description: "Wave functions, Schrödinger equation, and quantum states",
-      timestamp: "1 hour ago",
-      icon: "⚛️",
-      color: "from-blue-600/5 to-cyan-600/5",
-      progress: 92,
-    },
-    {
-      id: 3,
-      title: "Financial Markets & Trading",
-      description: "Options trading, market analysis, and risk management",
-      timestamp: "3 hours ago",
-      icon: "📈",
-      color: "from-green-600/5 to-emerald-600/5",
-      progress: 78,
-    },
-  ];
 
   const handleSubmit = async () => {
     if (!notes.trim() && uploadedFiles.length === 0) {
       toast.error("Please add some notes or upload content");
       return;
     }
-
+    if (notes.trim()) {
+      router.push(`/learn/chat?prompt=${encodeURIComponent(notes.trim())}`);
+    } else {
+      router.push("/learn/chat");
+    }
     setUploading(true);
     setProgress(0);
-
     try {
       const payload = {
         notes: notes,
         files: uploadedFiles.map((file) => file.url),
       };
-
-      console.log("Sending payload:", payload);
-
-      const response = await fetch("http://127.0.0.1:5000/process-content", {
+      localStorage.setItem("chatPayload", JSON.stringify(payload));
+      await fetch("http://127.0.0.1:5000/process-content", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
       });
-
-      if (!response.ok) throw new Error("Failed to process content");
-
-      const data = await response.json();
-
-      console.log("Response data:", data);
-
-      if (!response.ok) {
-        const errorMessage = data.error || "Failed to process content";
-        console.error("Backend error:", errorMessage); 
-        throw new Error(errorMessage);
-      }
-
-      console.log("Processed Data:", data);
-      localStorage.setItem("chatResponse", JSON.stringify(data));
-
-      toast.success("Your content is being processed", {
-        icon: <Sparkles className="w-4 h-4" />,
-      });
-
-      setNotes("");
-      router.push("/learn/chat");
+    } catch (error) {
+      console.error("Error details:", error);
     }
-    
-    catch (error) {
-      console.error("Error details:", error); 
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "There was an error processing your content"
-      );
-    }
-
     setUploading(false);
     setProgress(0);
+    setNotes("");
   };
 
   return (
@@ -294,9 +292,13 @@ export default function UploadModule() {
                     <h2 className="text-3xl font-bold">All Conversations</h2>
                   </div>
                 </div>
-                
                 <div className="space-y-4">
-                  {conversations.map((conv) => (
+                  {recentChats.length === 0 && (
+                    <div className="text-center text-gray-500 text-lg py-8">
+                      No conversations yet.
+                    </div>
+                  )}
+                  {recentChats.map((conv) => (
                     <motion.div
                       key={conv.id}
                       initial={{ opacity: 0, y: 20 }}
@@ -366,7 +368,6 @@ export default function UploadModule() {
                   <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-violet-600"> learn?</span>
                 </h1>
               </div>
-
               <div className="space-y-6">
                 <div className="relative"
                   onDragOver={onDragOver}
@@ -379,7 +380,6 @@ export default function UploadModule() {
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                   />
-
                   {isDragging && (
                     <div className="absolute inset-0 rounded-2xl border-2 border-dashed border-blue-400 bg-blue-50/50 backdrop-blur-[1px] flex items-center justify-center">
                       <div className="text-center">
@@ -388,7 +388,6 @@ export default function UploadModule() {
                       </div>
                     </div>
                   )}
-                  
                   <div className="absolute bottom-4 right-4 flex items-center gap-3">
                     <div
                       className={cn(
@@ -409,10 +408,9 @@ export default function UploadModule() {
                         className="flex items-center gap-2 cursor-pointer text-sm"
                       >
                         <Upload className="h-4 w-4 text-blue-600 group-hover:scale-110 transition-transform" />
-                        <span className="text-gray-600">Drag files or click to upload</span>
+                        <span className="text-gray-600">Upload</span>
                       </label>
                     </div>
-
                     <Button
                       onClick={handleSubmit}
                       className="bg-gradient-to-r from-blue-600 to-violet-600 hover:opacity-90 px-6 py-2 text-base rounded-lg shadow-lg shadow-blue-600/20"
@@ -428,7 +426,6 @@ export default function UploadModule() {
                     </Button>
                   </div>
                 </div>
-
                 {uploadedFiles.length > 0 && (
                   <div className="flex flex-wrap gap-2">
                     {uploadedFiles.map((file, index) => (
@@ -446,7 +443,6 @@ export default function UploadModule() {
                 )}
               </div>
             </div>
-
             <AnimatePresence>
               {uploading && (
                 <motion.div
@@ -466,7 +462,7 @@ export default function UploadModule() {
             </AnimatePresence>
           </motion.div>
 
-          {conversations.length > 0 && (
+          {recentChats.length > 0 && (
             <motion.div
               variants={scaleIn}
               className="space-y-6"
@@ -481,9 +477,8 @@ export default function UploadModule() {
                   View All
                 </Button>
               </div>
-              
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {conversations.slice(0, 3).map((conv) => (
+                {recentChats.map((conv) => (
                   <motion.div
                     key={conv.id}
                     className="group relative rounded-2xl bg-gradient-to-tr from-gray-50 to-blue-50 p-6 hover:shadow-lg transition-all"

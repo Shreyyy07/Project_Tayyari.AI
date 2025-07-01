@@ -115,7 +115,7 @@ export default function Chat() {
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
       <Card className="w-full max-w-4xl">
         <CardHeader>
-          <CardTitle>MindFlow Chat</CardTitle>
+          <CardTitle>Tayyari Chat</CardTitle>
           {error && (
             <div className="text-red-500 text-sm mt-2">
               Error: {error}
