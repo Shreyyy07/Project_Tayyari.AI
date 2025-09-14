@@ -7,8 +7,8 @@ from flask_cors import CORS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader
 from werkzeug.utils import secure_filename
-import kokoro
-from kokoro import KPipeline
+import kokoro_local as kokoro
+from kokoro_local import KPipeline
 import soundfile as sf
 import numpy as np
 import re
