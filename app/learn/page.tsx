@@ -2,7 +2,7 @@
 
 import type React from "react";
 import { useState, useEffect } from "react";
-import { Upload, Loader2, Sparkles, FileText, ArrowLeft } from "lucide-react";
+import { Upload, Loader2, Sparkles, FileText, ArrowLeft, MessageSquare } from "lucide-react"; // Added MessageSquare
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -368,6 +368,7 @@ export default function UploadModule() {
                   <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-violet-600"> learn?</span>
                 </h1>
               </div>
+              
               <div className="space-y-6">
                 <div className="relative"
                   onDragOver={onDragOver}
@@ -426,6 +427,7 @@ export default function UploadModule() {
                     </Button>
                   </div>
                 </div>
+                
                 {uploadedFiles.length > 0 && (
                   <div className="flex flex-wrap gap-2">
                     {uploadedFiles.map((file, index) => (
@@ -442,7 +444,26 @@ export default function UploadModule() {
                   </div>
                 )}
               </div>
+
+              {/* 👇 NEW: CONVERSATIONS BUTTON ADDED HERE 👇 */}
+              <motion.div
+                className="flex justify-center"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+              >
+                <Button
+                  onClick={() => router.push('/learn/conversations')}
+                  variant="outline"
+                  className="bg-gradient-to-r from-gray-50 to-blue-50 border-blue-200 text-blue-700 hover:from-blue-50 hover:to-violet-50 hover:border-violet-300 px-8 py-3 rounded-xl font-medium shadow-sm hover:shadow-md transition-all duration-200"
+                >
+                  <MessageSquare className="w-5 h-5 mr-2" />
+                  View All Conversations
+                </Button>
+              </motion.div>
+              {/* 👆 END OF NEW CONVERSATIONS BUTTON 👆 */}
             </div>
+
             <AnimatePresence>
               {uploading && (
                 <motion.div
@@ -481,9 +502,14 @@ export default function UploadModule() {
                 {recentChats.map((conv) => (
                   <motion.div
                     key={conv.id}
-                    className="group relative rounded-2xl bg-gradient-to-tr from-gray-50 to-blue-50 p-6 hover:shadow-lg transition-all"
+                    className="group relative rounded-2xl bg-gradient-to-tr from-gray-50 to-blue-50 p-6 hover:shadow-lg transition-all cursor-pointer"
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      // Clear current chat and start fresh with this conversation
+                      localStorage.setItem('tayyari-chat-messages-v2', JSON.stringify([]));
+                      router.push(`/learn/chat?prompt=${encodeURIComponent(conv.title)}`);
+                    }}
                   >
                     <div className={cn("absolute inset-0 rounded-2xl bg-gradient-to-r", conv.color)} />
                     <div className="relative flex items-center gap-4">

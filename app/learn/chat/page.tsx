@@ -17,7 +17,7 @@ import {
   PaperAirplaneIcon,
   StopIcon,
 } from "@heroicons/react/24/solid";
-import { Loader2, Speaker } from "lucide-react";
+import { Loader2, Speaker, Languages } from "lucide-react";
 import Navbar from "@/components/custom/navbar";
 import axios from "axios";
 import ReactMarkdown from "react-markdown";
@@ -37,11 +37,197 @@ const AI_BUBBLE =
   "bg-white/90 border border-[#f1eafd] shadow-md";
 const AI_BUBBLE_EXTRA = "before:absolute before:inset-0 before:bg-gradient-to-r before:from-[#e8eafe]/60 before:to-[#f7e8fc]/30 before:opacity-80 before:pointer-events-none";
 
+// === UNSPLASH IMAGE COMPONENT (unchanged) ===
+function UnsplashImage({ topic }: { topic: string }) {
+  const [imageData, setImageData] = useState<{
+    imageUrl: string;
+    description: string;
+    photographer: string;
+    photographerUrl: string;
+  } | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    const fetchImage = async () => {
+      setIsLoading(true);
+      setError(false);
+      
+      let cleanTopic = topic
+        .replace(/[#*`_]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      
+      const keywords = cleanTopic
+        .split(' ')
+        .filter(word => 
+          word.length > 2 && 
+          !['the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'her', 'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'its', 'may', 'new', 'now', 'old', 'see', 'two', 'way', 'who', 'boy', 'did', 'man', 'end', 'few', 'got', 'let', 'put', 'say', 'she', 'too', 'use'].includes(word.toLowerCase())
+        )
+        .slice(0, 3)
+        .join(' ');
+      
+      const finalQuery = keywords || cleanTopic.split(' ').slice(0, 2).join(' ');
+      setSearchQuery(finalQuery);
+      
+      if (!finalQuery) {
+        setError(true);
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/search-image?q=${encodeURIComponent(finalQuery)}`);
+        
+        if (!response.ok) {
+          throw new Error('API request failed');
+        }
+        
+        const data = await response.json();
+        
+        if (data.imageUrl) {
+          setImageData(data);
+        } else {
+          setError(true);
+        }
+      } catch (err) {
+        console.error('Failed to fetch image:', err);
+        setError(true);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchImage();
+  }, [topic]);
+
+  if (isLoading) {
+    return (
+      <div className="my-4 h-48 bg-gradient-to-r from-gray-100 to-gray-200 rounded-xl border-2 border-gray-200/40 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-6 w-6 animate-spin text-gray-400 mx-auto mb-2" />
+          <p className="text-sm text-gray-500">Searching for: "{searchQuery}"</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !imageData) {
+    return (
+      <div className="my-4 h-32 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border-2 border-gray-200/40 flex items-center justify-center">
+        <div className="text-center text-gray-500">
+          <p className="text-sm">📸 No relevant image found</p>
+          <p className="text-xs">Searched: "{searchQuery}"</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="my-4">
+      <img
+        src={imageData.imageUrl}
+        alt={imageData.description}
+        className="mx-auto rounded-xl border-2 border-blue-200/40 shadow-lg hover:shadow-xl transition-shadow duration-300"
+        style={{ 
+          maxHeight: 300, 
+          maxWidth: 500,
+          objectFit: "cover",
+          width: "100%"
+        }}
+        onError={() => setError(true)}
+      />
+      <div className="text-center mt-2">
+        <p className="text-xs text-gray-500">
+          📸 "{searchQuery}" by{' '}
+          <a 
+            href={imageData.photographerUrl} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-blue-500 hover:underline"
+          >
+            {imageData.photographer}
+          </a>
+          {' '}on Unsplash
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// === TOPIC EXTRACTION FUNCTION (unchanged) ===
+function extractMainTopic(content: string): string {
+  let cleanContent = content.replace(/[#*`_]/g, '').trim();
+  
+  const headingMatch = content.match(/##\s*(.+?)(?:\n|$)/);
+  if (headingMatch) {
+    const heading = headingMatch[1].trim();
+    const keyTerms = heading
+      .split(/[:\-,]/)
+      .map(term => term.trim())
+      .filter(term => term.length > 2)
+      .slice(0, 2)
+      .join(' ');
+    
+    if (keyTerms.length > 3) {
+      return keyTerms;
+    }
+  }
+  
+  const sentences = cleanContent.split(/[.!?]+/);
+  for (const sentence of sentences) {
+    const cleaned = sentence.trim();
+    if (cleaned.length > 15 && cleaned.length < 80) {
+      const words = cleaned.split(' ')
+        .filter(word => word.length > 3 && !['this', 'that', 'with', 'from', 'they', 'have', 'been', 'will', 'would', 'could', 'should', 'might', 'must', 'shall', 'will', 'about', 'above', 'after', 'again', 'against', 'before', 'being', 'below', 'between', 'both', 'during', 'each', 'further', 'here', 'into', 'more', 'most', 'other', 'same', 'some', 'such', 'than', 'then', 'these', 'those', 'through', 'under', 'until', 'very', 'were', 'what', 'when', 'where', 'which', 'while', 'your'].includes(word.toLowerCase()))
+        .slice(0, 3)
+        .join(' ');
+      
+      if (words.length > 5) {
+        return words;
+      }
+    }
+  }
+  
+  return cleanContent.substring(0, 30).trim();
+}
+
+// Replace the LANGUAGES array in your chat component with this one
+const LANGUAGES = [
+  { code: 'es', name: 'Spanish' },
+  { code: 'fr', name: 'French' },
+  { code: 'de', name: 'German' },
+  { code: 'it', name: 'Italian' },
+  { code: 'pt', name: 'Portuguese' },
+  { code: 'ru', name: 'Russian' },
+  { code: 'ja', name: 'Japanese' },
+  { code: 'ko', name: 'Korean' },
+  { code: 'zh', name: 'Chinese (Simplified)' },
+  { code: 'ar', name: 'Arabic' },
+  { code: 'hi', name: 'Hindi' },
+  { code: 'tr', name: 'Turkish' },
+  { code: 'nl', name: 'Dutch' },
+  { code: 'sv', name: 'Swedish' },
+  { code: 'no', name: 'Norwegian' },
+  { code: 'da', name: 'Danish' },
+  { code: 'fi', name: 'Finnish' },
+  { code: 'pl', name: 'Polish' },
+  { code: 'cs', name: 'Czech' },
+  { code: 'hu', name: 'Hungarian' },
+  { code: 'th', name: 'Thai' },
+  { code: 'vi', name: 'Vietnamese' },
+  { code: 'id', name: 'Indonesian' },
+  { code: 'ms', name: 'Malay' },
+  { code: 'uk', name: 'Ukrainian' },
+];
+
 interface Message {
   id: number;
   content: string;
   sender: "user" | "ai";
   quiz?: QuizBlock;
+  isOriginalPrompt?: boolean; // NEW: Track if this is from original user prompt
 }
 
 interface QuizBlock {
@@ -50,6 +236,8 @@ interface QuizBlock {
   results: (boolean | null)[];
   showResults: boolean;
   showButton: boolean;
+  score?: number; // Added to support quiz scoring
+  totalQuestions?: number; // Added to support total questions count
 }
 
 interface QuizQuestion {
@@ -58,6 +246,20 @@ interface QuizQuestion {
   correct_answer: string;
   explanation: string;
   diagram?: string;
+}
+
+interface Conversation {
+  id: string;
+  title: string;
+  topic: string;
+  timestamp: number;
+  messages: Message[];
+  quizProgress: {
+    totalQuizzes: number;
+    completedQuizzes: number;
+    averageScore: number;
+    lastQuizScore: number;
+  };
 }
 
 const LOCALSTORAGE_KEY = "tayyari-chat-messages-v2";
@@ -70,6 +272,8 @@ const Chat: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isProcessingAudio, setIsProcessingAudio] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false); // NEW: Translation state
+  const [showLanguageDropdown, setShowLanguageDropdown] = useState<number | null>(null); // NEW: Dropdown state
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -90,8 +294,77 @@ const Chat: React.FC = () => {
     }
   }, []);
 
-  // === STATE RESTORATION ===
+  // NEW: Save conversation with progress tracking
+  const saveConversation = useCallback(() => {
+  if (messages.length === 0) return;
+  
+  // Get first user message as title
+  const firstUserMessage = messages.find(m => m.sender === 'user');
+  if (!firstUserMessage) return;
+  
+  // Create a unique conversation ID based on the first user message
+  const conversationId = `conv-${firstUserMessage.content.substring(0, 20).replace(/[^a-zA-Z0-9]/g, '')}-${firstUserMessage.id}`;
+  
+  // Check if this conversation already exists
+  const existingConversation = localStorage.getItem(`tayyari-conversation-${conversationId}`);
+  
+  // Calculate quiz progress
+  const quizMessages = messages.filter(m => m.quiz && m.quiz.showResults);
+  const totalQuizzes = quizMessages.length;
+  let totalScore = 0;
+  let lastQuizScore = 0;
+  
+  quizMessages.forEach((msg, index) => {
+    if (msg.quiz && msg.quiz.results) {
+      const correct = msg.quiz.results.filter(r => r === true).length;
+      const score = Math.round((correct / msg.quiz.results.length) * 100);
+      totalScore += score;
+      if (index === quizMessages.length - 1) lastQuizScore = score;
+    }
+  });
+  
+  const averageScore = totalQuizzes > 0 ? Math.round(totalScore / totalQuizzes) : 0;
+  
+  // Extract topic from first AI response
+  const firstAiMessage = messages.find(m => m.sender === 'ai');
+  const topic = firstAiMessage ? extractMainTopic(firstAiMessage.content) : 'General';
+  
+  const conversation: Conversation = {
+    id: conversationId, // Use the unique ID
+    title: firstUserMessage.content.length > 50 
+      ? firstUserMessage.content.substring(0, 50) + '...' 
+      : firstUserMessage.content,
+    topic: topic,
+    timestamp: existingConversation ? JSON.parse(existingConversation).timestamp : Date.now(), // Keep original timestamp
+    messages: messages,
+    quizProgress: {
+      totalQuizzes: totalQuizzes,
+      completedQuizzes: totalQuizzes,
+      averageScore: averageScore,
+      lastQuizScore: lastQuizScore,
+    }
+  };
+  
+  // Save with the unique ID
+  localStorage.setItem(`tayyari-conversation-${conversationId}`, JSON.stringify(conversation));
+}, [messages]);
+
   useEffect(() => {
+  const conversationId = searchParams.get("conversationId");
+  
+  if (conversationId) {
+    // Loading an existing conversation
+    const conversation = localStorage.getItem(`tayyari-conversation-${conversationId}`);
+    if (conversation) {
+      try {
+        const parsedConversation = JSON.parse(conversation);
+        setMessages(parsedConversation.messages);
+      } catch (e) {
+        setMessages([]);
+      }
+    }
+  } else {
+    // Loading from regular localStorage
     const saved = localStorage.getItem(LOCALSTORAGE_KEY);
     if (saved) {
       try {
@@ -100,7 +373,9 @@ const Chat: React.FC = () => {
         setMessages([]);
       }
     }
-  }, []);
+  }
+}, [searchParams]);
+
   useEffect(() => {
     localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(messages));
     scrollToBottom();
@@ -132,6 +407,7 @@ const Chat: React.FC = () => {
             id: Date.now() + 1,
             content: aiContent,
             sender: "ai",
+            isOriginalPrompt: true, // NEW: Mark as original prompt response
           };
           setMessages([userMessage, aiMessage]);
         })
@@ -142,6 +418,7 @@ const Chat: React.FC = () => {
               id: Date.now() + 1,
               content: "Oops! Something went wrong. Please try again.",
               sender: "ai",
+              isOriginalPrompt: true, // NEW: Mark as original prompt response
             },
           ]);
         })
@@ -149,6 +426,33 @@ const Chat: React.FC = () => {
     }
     // eslint-disable-next-line
   }, []);
+   // === NEW: CLICK OUTSIDE TO CLOSE DROPDOWN ===
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showLanguageDropdown !== null) {
+        const dropdown = document.querySelector('.language-dropdown');
+        if (dropdown && !dropdown.contains(event.target as Node)) {
+          setShowLanguageDropdown(null);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showLanguageDropdown]);
+    // NEW: Auto-save conversation when messages change
+  useEffect(() => {
+    if (messages.length > 1) { // Save only when there's at least one exchange
+      const timeoutId = setTimeout(() => {
+        saveConversation();
+      }, 2000); // Save 2 seconds after last message
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [messages, saveConversation]);
+
 
   // === SEND MESSAGE ===
   const handleSubmit = async (e: React.FormEvent) => {
@@ -182,6 +486,7 @@ const Chat: React.FC = () => {
         id: Date.now() + 1,
         content: aiContent,
         sender: "ai",
+        isOriginalPrompt: true, // NEW: Mark as original prompt response
       };
       setMessages((prev) => [...prev, aiMessage]);
     } catch (error) {
@@ -189,6 +494,7 @@ const Chat: React.FC = () => {
         id: Date.now() + 1,
         content: "Oops! Something went wrong. Please try again.",
         sender: "ai",
+        isOriginalPrompt: true, // NEW: Mark as original prompt response
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
@@ -280,6 +586,49 @@ const Chat: React.FC = () => {
     }
   };
 
+ // Replace your handleTranslate function with this improved version
+const handleTranslate = async (content: string, targetLanguage: string, messageId: number) => {
+  setIsTranslating(true);
+  setShowLanguageDropdown(null);
+  
+  try {
+    const response = await axios.post("/api/translate", {
+      text: content,
+      target_language: targetLanguage,
+    });
+    
+    if (response.data.translated_text) {
+      const languageName = LANGUAGES.find(l => l.code === targetLanguage)?.name || targetLanguage;
+      const translatedContent = response.data.translated_text;
+      const service = response.data.service || 'Translation Service';
+      
+      const translatedMessage: Message = {
+        id: Date.now(),
+        content: `## 🌍 Translated to ${languageName}\n\n${translatedContent}\n\n---\n*Translated using ${service}*`,
+        sender: "ai",
+        isOriginalPrompt: false,
+      };
+      
+      setMessages((prev) => [...prev, translatedMessage]);
+    } else {
+      throw new Error('No translation received');
+    }
+  } catch (error) {
+    console.error('Translation failed:', error);
+    
+    const languageName = LANGUAGES.find(l => l.code === targetLanguage)?.name || targetLanguage;
+    const errorMessage: Message = {
+      id: Date.now(),
+      content: `❌ **Translation Failed**\n\nSorry, I couldn't translate the text to ${languageName}. The translation service might be temporarily unavailable.\n\n*Please try again in a moment or try a different language.*`,
+      sender: "ai",
+      isOriginalPrompt: false,
+    };
+    setMessages((prev) => [...prev, errorMessage]);
+  } finally {
+    setIsTranslating(false);
+  }
+};
+
   // === EXPLAIN MORE ===
   const handleExplainMore = async (content: string) => {
     setIsLoading(true);
@@ -298,6 +647,7 @@ const Chat: React.FC = () => {
         id: Date.now(),
         content: aiContent,
         sender: "ai",
+        isOriginalPrompt: false, // NEW: Not an original prompt, so no image
       };
       setMessages((prev) => [...prev, aiMessage]);
     } catch (error) {
@@ -307,6 +657,7 @@ const Chat: React.FC = () => {
           id: Date.now(),
           content: "Sorry, I couldn't generate a deeper explanation.",
           sender: "ai",
+          isOriginalPrompt: false, // NEW: Not an original prompt, so no image
         },
       ]);
     } finally {
@@ -340,6 +691,7 @@ const Chat: React.FC = () => {
           content: "Quiz Time!",
           sender: "ai",
           quiz: quizBlock,
+          isOriginalPrompt: false, // NEW: Not an original prompt, so no image
         };
         setMessages((prev) => [...prev, aiMessage]);
       } else {
@@ -350,6 +702,7 @@ const Chat: React.FC = () => {
             content:
               "Sorry, I couldn't generate quiz questions for this content. Try rephrasing or using another topic.",
             sender: "ai",
+            isOriginalPrompt: false, // NEW: Not an original prompt, so no image
           },
         ]);
       }
@@ -360,6 +713,7 @@ const Chat: React.FC = () => {
           id: Date.now(),
           content: "Sorry, I couldn't generate interactive questions.",
           sender: "ai",
+          isOriginalPrompt: false, // NEW: Not an original prompt, so no image
         },
       ]);
     } finally {
@@ -395,25 +749,34 @@ const Chat: React.FC = () => {
     });
   };
 
-  // === SHOW CORRECT ANSWERS BUTTON (IMMUTABLE UPDATE) ===
+ // === SHOW CORRECT ANSWERS BUTTON (UPDATED WITH SCORE TRACKING) ===
   const handleQuizReveal = (messageIdx: number) => {
     setMessages((prev) => {
       const newMessages = [...prev];
       const oldQuiz = newMessages[messageIdx].quiz;
       if (!oldQuiz || oldQuiz.showResults) return prev;
+      
+      const results = oldQuiz.questions.map(
+        (q, i) => oldQuiz.userAnswers[i] === q.correct_answer
+      );
+      
+      const score = Math.round((results.filter(r => r).length / results.length) * 100);
+      
       const quiz: QuizBlock = {
         ...oldQuiz,
         userAnswers: [...oldQuiz.userAnswers],
-        results: oldQuiz.questions.map(
-          (q, i) => oldQuiz.userAnswers[i] === q.correct_answer
-        ),
+        results: results,
         showResults: true,
         showButton: false,
+        score: score, // NEW: Add score
+        totalQuestions: results.length, // NEW: Add total questions
       };
+      
       newMessages[messageIdx] = { ...newMessages[messageIdx], quiz };
       return newMessages;
     });
   };
+
 
   // === NEW CHAT ===
   const handleNewChat = () => {
@@ -541,7 +904,13 @@ const Chat: React.FC = () => {
                         >
                           {message.content}
                         </ReactMarkdown>
-                        <div className="flex gap-2 mt-3">
+
+                        {/* NEW: CONDITIONAL IMAGE DISPLAY - Only show for original prompts */}
+                        {message.isOriginalPrompt && (
+                          <UnsplashImage topic={extractMainTopic(message.content)} />
+                        )}
+
+                        <div className="flex gap-2 mt-3 flex-wrap">
                           <Button
                             variant="outline"
                             size="sm"
@@ -574,6 +943,38 @@ const Chat: React.FC = () => {
                             )}
                             {isSpeaking ? "Stop" : isProcessingAudio ? "Processing..." : "Listen"}
                           </Button>
+                          
+                          {/* NEW: TRANSLATE BUTTON WITH DROPDOWN */}
+                          <div className="relative">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-xs font-semibold bg-gradient-to-tr from-purple-100 to-indigo-100 border border-purple-200 text-purple-700 hover:from-purple-200 hover:to-indigo-200"
+                              onClick={() => setShowLanguageDropdown(showLanguageDropdown === message.id ? null : message.id)}
+                              disabled={isTranslating}
+                            >
+                              {isTranslating ? (
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              ) : (
+                                <Languages className="h-4 w-4 mr-1" />
+                              )}
+                              {isTranslating ? "Translating..." : "Translate"}
+                            </Button>
+                            
+                           {showLanguageDropdown === message.id && (
+  <div className="language-dropdown absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
+    {LANGUAGES.map((lang) => (
+      <button
+        key={lang.code}
+        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 border-b border-gray-100 last:border-b-0 transition-colors"
+        onClick={() => handleTranslate(message.content, lang.code, message.id)}
+      >
+        🌍 {lang.name}
+      </button>
+    ))}
+  </div>
+)}
+                          </div>
                         </div>
                       </>
                     ) : (
@@ -711,7 +1112,7 @@ const Chat: React.FC = () => {
   );
 };
 
-// === QUIZ UI COMPONENT ===
+// === QUIZ UI COMPONENT (unchanged) ===
 function QuizUI({
   quiz,
   messageIdx,
